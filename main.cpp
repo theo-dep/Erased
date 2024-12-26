@@ -14,14 +14,39 @@ struct Draw {
   }
 };
 
+struct Open {
+  static void invoker(auto &self, const std::string &path) { self.open(path); }
+
+  void open(this auto &erased, const auto &path) {
+    erased.invoke(Open{}, path);
+  }
+};
+struct Close {
+  static void invoker(auto &self) { self.close(); }
+
+  void close(this auto &erased) { erased.invoke(Close{}); }
+};
+
 using Drawable = erased::erased<Draw>;
+using Openable = erased::erased<Open, Close>;
 
 struct Circle {
   void draw(std::ostream &stream) const { stream << "Circle\n"; }
 };
 
+struct Rectangle {
+  void draw(std::ostream &stream) const { stream << "Rectangle\n"; }
+};
+
 int main() {
-  Drawable drawable = Circle{};
-  drawable.draw(std::cout);
+  std::cout << sizeof(Drawable) << " " << sizeof(Openable) << "\n";
+
+  Drawable x = Circle();
+
+  x.draw(std::cout);
+
+  x = Rectangle();
+  x.draw(std::cout);
+
   return 0;
 }

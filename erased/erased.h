@@ -43,26 +43,44 @@ template <typename T, typename... List> constexpr int index_in_list() {
   return -1;
 }
 
+template <typename... Methods> class vtable {
+public:
+  template <typename Method> auto get_function_for() const noexcept {
+    return std::get<index_in_list<Method, Methods...>()>(m_pointers);
+  }
+
+  template <typename T> static const vtable *construct_for() noexcept {
+    static vtable vtable{MethodTrait<Methods>::template createInvoker<T>()...};
+    return &vtable;
+  }
+
+private:
+  vtable(MethodPtr<Methods>... ptrs) : m_pointers{ptrs...} {}
+
+private:
+  std::tuple<MethodPtr<Methods>...> m_pointers;
+};
+
 template <typename... Methods> class erased : public Methods... {
 private:
   std::any m_value;
-  std::tuple<MethodPtr<Methods>...> m_pointers{};
+  const vtable<Methods...> *m_vtable;
 
 public:
   template <typename T>
-  erased(T x)
+  erased(T x) noexcept
       : m_value(std::move(x)),
-        m_pointers{MethodTrait<Methods>::template createInvoker<T>()...} {}
+        m_vtable{vtable<Methods...>::template construct_for<T>()} {}
 
   template <typename Method, typename... Args>
   decltype(auto) invoke(Method, Args &&...args) const {
-    return std::get<index_in_list<Method, Methods...>()>(m_pointers)(
+    return m_vtable->template get_function_for<Method>()(
         m_value, std::forward<Args>(args)...);
   }
 
   template <typename Method, typename... Args>
   decltype(auto) invoke(Method, Args &&...args) {
-    return std::get<index_in_list<Method, Methods...>()>(m_pointers)(
+    return m_vtable->template get_function_for<Method>()(
         m_value, std::forward<Args>(args)...);
   }
 };
