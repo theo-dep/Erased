@@ -31,11 +31,15 @@ struct Rectangle {
 
 using Surface = erased::erased<ComputeArea, Perimeter>;
 
-constexpr double f(Surface x) { return x.perimeter() + x.computeArea(); }
+constexpr double simpleComputation(Surface x) {
+  return x.perimeter() + x.computeArea();
+}
 
-int main() {
-  static_assert(f(Circle()) == 6.28 + 3.14);
-  static_assert(f(Rectangle()) == 4.0 + 1.0);
+void simple_computation() {
+  static_assert(simpleComputation(Circle()) == 6.28 + 3.14);
+  static_assert(simpleComputation(Rectangle()) == 4.0 + 1.0);
 
   static_assert(sizeof(Surface) == 32);
 }
+
+int main() {}

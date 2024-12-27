@@ -1,0 +1,2 @@
+add_executable(CompileTimeTests compile_time_tests.cpp)
+target_link_libraries(CompileTimeTests PRIVATE erased)
