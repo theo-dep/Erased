@@ -1,10 +1,20 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
+include(FetchContent)
 
-project(Erased LANGUAGES CXX)
+project(erased LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_subdirectory(erased)
 
-add_executable(Erased main.cpp erased/erased.h)
+#FetchContent_Declare(googletest
+#GIT_REPOSITORY https://github.com/google/googletest
+#GIT_TAG v1.15.2)
 
+#FetchContent_Declare(googlebench
+#GIT_REPOSITORY https://github.com/google/benchmark
+#GIT_TAG v1.9.1
+#)
 
+#FetchContent_MakeAvailable(googletest googlebench)
+
+add_subdirectory(examples)
+add_subdirectory(tests)
