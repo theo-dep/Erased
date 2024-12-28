@@ -54,10 +54,10 @@ struct Base {
 };
 
 struct Copy {
-  static void invoker(const auto &);
+  static void invoker(const auto &) {}
 };
 struct Move {
-  static void invoker(const auto &);
+  static void invoker(const auto &) {}
 };
 
 namespace details::base {

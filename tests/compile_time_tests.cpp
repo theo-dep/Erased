@@ -19,13 +19,18 @@ struct Perimeter {
 };
 
 struct Circle {
-  constexpr double computeArea() { return 3.14; }
-  constexpr double perimeter() const { return 6.28; }
+  constexpr double computeArea() { return radius * radius * 3.14; }
+  constexpr double perimeter() const { return radius * 6.28; }
+
+  double radius = 1.0;
 };
 
 struct Rectangle {
-  constexpr double computeArea() { return 1.0; }
-  constexpr double perimeter() const { return 4.0; }
+  constexpr double computeArea() { return a * b; }
+  constexpr double perimeter() const { return 2.0 * (a + b); }
+
+  double a = 1.0;
+  double b = 1.0;
 };
 
 using Surface =
@@ -72,19 +77,35 @@ constexpr double simpleMove() {
 }
 
 constexpr double simpleCopy() {
-  Surface x = Circle();
+  Surface x = Circle(5.0);
   Surface y(x);
-  Surface z = Rectangle();
+  Surface z = Rectangle(10.0);
   x = z;
   return simpleComputation(y) + simpleComputation(x);
 }
 
+constexpr double in_place_construction() {
+  Surface x(std::in_place_type<Circle>, 10.0);
+  Surface y(std::in_place_type<Rectangle>, 10.0, 5.0);
+
+  return y.computeArea() + x.perimeter();
+}
+
 void tests() {
-  static_assert(simpleComputation(Circle()) == 6.28 + 3.14);
-  static_assert(simpleComputation(Rectangle()) == 4.0 + 1.0);
+  static_assert(simpleComputation(Circle(2.0)) ==
+                Circle(2.0).computeArea() + Circle(2.0).perimeter());
+  static_assert(simpleComputation(Rectangle(3.0)) ==
+                Rectangle(3.0).computeArea() + Rectangle(3.0).perimeter());
 
   static_assert(simpleMove() == 1.0 + 4.0);
-  static_assert(simpleCopy() == (6.28 + 3.14) + (1.0 + 4.0));
+
+  static_assert(simpleCopy() ==
+                (Circle(5.0).perimeter() + Circle(5.0).computeArea()) +
+                    Rectangle(10.0).perimeter() +
+                    Rectangle(10.0).computeArea());
+
+  static_assert(in_place_construction() ==
+                (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
 }
 
 int main() {}

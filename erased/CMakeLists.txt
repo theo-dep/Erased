@@ -8,4 +8,7 @@ target_sources(erased
         FILE_SET erased_headers
         TYPE HEADERS
         BASE_DIRS ./include/
-        FILES include/erased/erased.h)
+        FILES include/erased/erased.h
+)
+
+add_library(erased::erased ALIAS erased)

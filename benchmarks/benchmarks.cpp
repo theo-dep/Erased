@@ -23,8 +23,10 @@ struct Perimeter {
 };
 
 struct Circle {
-  constexpr double computeArea() const { return 3.14; }
-  constexpr double perimeter() const { return 6.28; }
+  constexpr double computeArea() const { return m_radius * m_radius * 3.14; }
+  constexpr double perimeter() const { return m_radius * 6.28; }
+
+  double m_radius = 1.0;
 };
 
 struct Rectangle {
@@ -34,8 +36,9 @@ struct Rectangle {
 
 struct BigCircle {
   std::byte padding[100];
-  constexpr double computeArea() const { return 3.14; }
-  constexpr double perimeter() const { return 6.28; }
+  double m_radius = 1.0;
+  constexpr double computeArea() const { return m_radius * m_radius * 3.14; }
+  constexpr double perimeter() const { return m_radius * 6.28; }
 };
 
 struct BigRectangle {
@@ -44,10 +47,17 @@ struct BigRectangle {
   constexpr double perimeter() const { return 4.0; }
 };
 
-using Surface = erased::erased<ComputeArea, Perimeter>;
+using Surface = erased::erased<ComputeArea, Perimeter, erased::Move>;
 
 template <typename... Ts> auto createSurfaces() {
   return std::array{Surface(Ts())...};
+}
+
+auto createLotSurfaces() {
+  std::vector<Surface> surfaces;
+  for (int i = 0; i < 1000; ++i)
+    surfaces.emplace_back(std::in_place_type<Circle>);
+  return surfaces;
 }
 
 } // namespace er
@@ -60,8 +70,10 @@ struct ISurface {
 };
 
 struct Circle : ISurface {
-  constexpr double computeArea() const override { return 3.14; }
-  constexpr double perimeter() const override { return 6.28; }
+  constexpr double computeArea() const { return m_radius * m_radius * 3.14; }
+  constexpr double perimeter() const { return m_radius * 6.28; }
+
+  double m_radius = 1.0;
 };
 
 struct Rectangle : ISurface {
@@ -71,8 +83,9 @@ struct Rectangle : ISurface {
 
 struct BigCircle : ISurface {
   std::byte padding[100];
-  constexpr double computeArea() const override { return 3.14; }
-  constexpr double perimeter() const override { return 6.28; }
+  double m_radius = 1.0;
+  constexpr double computeArea() const { return m_radius * m_radius * 3.14; }
+  constexpr double perimeter() const { return m_radius * 6.28; }
 };
 struct BigRectangle : ISurface {
   std::byte padding[100];
@@ -83,6 +96,13 @@ struct BigRectangle : ISurface {
 template <typename... Ts> auto createSurfaces() {
   return std::array<std::unique_ptr<ISurface>, sizeof...(Ts)>{
       std::make_unique<Ts>()...};
+}
+
+auto createLotSurfaces() {
+  std::vector<std::unique_ptr<ISurface>> surfaces;
+  for (int i = 0; i < 1000; ++i)
+    surfaces.emplace_back(std::make_unique<Circle>());
+  return surfaces;
 }
 
 } // namespace vt
@@ -115,6 +135,22 @@ template <typename... Ts> void testCallVTable(benchmark::State &state) {
   }
 }
 
+void testCallLotErased(benchmark::State &state) {
+  auto surfaces = er::createLotSurfaces();
+  for (auto &&_ : state) {
+    for (auto &&surface : surfaces)
+      benchmark::DoNotOptimize(surface.computeArea() + surface.perimeter());
+  }
+}
+
+void testCallLotVTable(benchmark::State &state) {
+  auto surfaces = vt::createLotSurfaces();
+  for (auto &&_ : state) {
+    for (auto &&surface : surfaces)
+      benchmark::DoNotOptimize(surface->computeArea() + surface->perimeter());
+  }
+}
+
 BENCHMARK(testConstructErased<er::Circle, er::Rectangle>);
 BENCHMARK(testConstructVTable<vt::Circle, vt::Rectangle>);
 BENCHMARK(testCallErased<er::Circle, er::Rectangle>);
@@ -124,5 +160,8 @@ BENCHMARK(testConstructErased<er::BigCircle, er::BigRectangle>);
 BENCHMARK(testConstructVTable<vt::BigCircle, vt::BigRectangle>);
 BENCHMARK(testCallErased<er::BigCircle, er::BigRectangle>);
 BENCHMARK(testCallVTable<vt::BigCircle, vt::BigRectangle>);
+
+BENCHMARK(testCallLotErased);
+BENCHMARK(testCallLotVTable);
 
 BENCHMARK_MAIN();
