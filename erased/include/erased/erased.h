@@ -217,8 +217,16 @@ struct alignas(Size) basic_erased : public Methods... {
     return *this;
   }
 
-  basic_erased(const basic_erased &) = delete;
-  basic_erased &operator=(const basic_erased &) = delete;
+  constexpr basic_erased(const basic_erased &other)
+      : m_dynamic(other.m_dynamic),
+        m_ptr(other.m_ptr->clone(m_dynamic, m_array.data())) {}
+
+  constexpr basic_erased &operator=(const basic_erased &other) {
+    destroy();
+    m_dynamic = other.m_dynamic;
+    m_ptr = other.m_ptr->move(m_dynamic, m_array.data());
+    return *this;
+  }
 
   constexpr void destroy() {
     if (m_dynamic)

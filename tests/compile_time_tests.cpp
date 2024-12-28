@@ -1,4 +1,3 @@
-#include <cassert>
 #include <erased/erased.h>
 
 struct ComputeArea {
@@ -42,13 +41,20 @@ constexpr double simpleMove() {
   return simpleComputation(std::move(x));
 }
 
-void simple_computation() {
+constexpr double simpleCopy() {
+  Surface x = Circle();
+  Surface y(x);
+  Surface z = Rectangle();
+  x = z;
+  return simpleComputation(y) + simpleComputation(x);
+}
+
+void tests() {
   static_assert(simpleComputation(Circle()) == 6.28 + 3.14);
   static_assert(simpleComputation(Rectangle()) == 4.0 + 1.0);
 
-  static_assert(sizeof(Surface) == 32);
+  static_assert(simpleMove() == 1.0 + 4.0);
+  static_assert(simpleCopy() == (6.28 + 3.14) + (1.0 + 4.0));
 }
-
-void simple_move() { static_assert(simpleMove() == 1.0 + 4.0); }
 
 int main() {}
