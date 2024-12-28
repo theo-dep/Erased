@@ -47,33 +47,31 @@ using CreateSignature =
 struct Copy {};
 struct Move {};
 
-namespace details::base {
-template <typename...> struct base_method;
+struct B {
+  constexpr virtual ~B() = default;
+  constexpr virtual B *clone(bool is_dynamic, std::byte *soo_buffer) const = 0;
+  constexpr virtual B *move(bool is_dynamic, std::byte *soo_buffer) = 0;
+};
 
-template <> struct base_method<> {
+namespace details::base {
+template <typename...> struct base;
+
+template <> struct base<> : B {
   constexpr void invoker() {}
-  constexpr virtual ~base_method() = default;
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base_method<Signature<Method, R (*)(Args...), constness::Const>,
-                   Others...> : base_method<Others...> {
-  using base_method<Others...>::invoker;
+struct base<Signature<Method, R (*)(Args...), constness::Const>, Others...>
+    : base<Others...> {
+  using base<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) const = 0;
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base_method<Signature<Method, R (*)(Args...), constness::Mutable>,
-                   Others...> : base_method<Others...> {
-  using base_method<Others...>::invoker;
+struct base<Signature<Method, R (*)(Args...), constness::Mutable>, Others...>
+    : base<Others...> {
+  using base<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) = 0;
-};
-
-template <typename... Signatures>
-struct base : public base_method<Signatures...> {
-  constexpr virtual base *clone(bool is_dynamic,
-                                std::byte *soo_buffer) const = 0;
-  constexpr virtual base *move(bool is_dynamic, std::byte *soo_buffer) = 0;
 };
 
 } // namespace details::base
@@ -178,7 +176,7 @@ struct alignas(Size) basic_erased : public Methods... {
 
   std::array<std::byte, buffer_size> m_array;
   bool m_dynamic = false;
-  Base *m_ptr;
+  B *m_ptr;
 
   template <typename T>
   constexpr basic_erased(T x)
@@ -199,11 +197,11 @@ struct alignas(Size) basic_erased : public Methods... {
             m_array, static_cast<Args &&>(args)...)} {}
 
   template <typename Method> constexpr decltype(auto) invoke(Method) const {
-    return std::as_const(*m_ptr).invoker(Method{});
+    return static_cast<const Base *>(m_ptr)->invoker(Method{});
   }
 
   template <typename Method> constexpr decltype(auto) invoke(Method) {
-    return m_ptr->invoker(Method{});
+    return static_cast<Base *>(m_ptr)->invoker(Method{});
   }
 
   constexpr basic_erased(basic_erased &&other) noexcept
@@ -232,7 +230,7 @@ struct alignas(Size) basic_erased : public Methods... {
     if (m_dynamic)
       delete m_ptr;
     else
-      m_ptr->~Base();
+      m_ptr->~B();
   }
 
   constexpr ~basic_erased() { destroy(); }
