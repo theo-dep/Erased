@@ -1,4 +1,5 @@
 #include <erased/erased.h>
+#include <gtest/gtest.h>
 
 struct ComputeArea {
   constexpr static double invoker(auto &self) { return self.computeArea(); }
@@ -91,7 +92,7 @@ constexpr double in_place_construction() {
   return y.computeArea() + x.perimeter();
 }
 
-void tests() {
+TEST(CompileTimeTest, Tests) {
   static_assert(simpleComputation(Circle(2.0)) ==
                 Circle(2.0).computeArea() + Circle(2.0).perimeter());
   static_assert(simpleComputation(Rectangle(3.0)) ==
@@ -107,5 +108,3 @@ void tests() {
   static_assert(in_place_construction() ==
                 (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
 }
-
-int main() {}
