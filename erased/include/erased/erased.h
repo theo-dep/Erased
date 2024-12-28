@@ -4,6 +4,8 @@
 #include <type_traits>
 #include <utility>
 
+#define fwd(x) static_cast<decltype(x) &&>(x)
+
 namespace erased {
 
 struct erased_type_t {};
@@ -44,33 +46,38 @@ template <typename Method>
 using CreateSignature =
     Signature<Method, MethodPtr<Method>, MethodTrait<Method>::cv_ref>;
 
-struct Copy {};
-struct Move {};
+struct Base {
+  constexpr virtual ~Base() = default;
+  constexpr virtual Base *clone(bool is_dynamic,
+                                std::byte *soo_buffer) const = 0;
+  constexpr virtual Base *move(bool is_dynamic, std::byte *soo_buffer) = 0;
+};
 
-struct B {
-  constexpr virtual ~B() = default;
-  constexpr virtual B *clone(bool is_dynamic, std::byte *soo_buffer) const = 0;
-  constexpr virtual B *move(bool is_dynamic, std::byte *soo_buffer) = 0;
+struct Copy {
+  static void invoker(const auto &);
+};
+struct Move {
+  static void invoker(const auto &);
 };
 
 namespace details::base {
-template <typename...> struct base;
+template <typename...> struct base_with_methods;
 
-template <> struct base<> : B {
+template <> struct base_with_methods<> : Base {
   constexpr void invoker() {}
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base<Signature<Method, R (*)(Args...), constness::Const>, Others...>
-    : base<Others...> {
-  using base<Others...>::invoker;
+struct base_with_methods<Signature<Method, R (*)(Args...), constness::Const>,
+                         Others...> : base_with_methods<Others...> {
+  using base_with_methods<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) const = 0;
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base<Signature<Method, R (*)(Args...), constness::Mutable>, Others...>
-    : base<Others...> {
-  using base<Others...>::invoker;
+struct base_with_methods<Signature<Method, R (*)(Args...), constness::Mutable>,
+                         Others...> : base_with_methods<Others...> {
+  using base_with_methods<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) = 0;
 };
 
@@ -85,8 +92,7 @@ struct concrete_method<Base, Type> : Base {
   Type m_object;
 
   template <typename... Args>
-  constexpr concrete_method(Args &&...args)
-      : m_object{static_cast<Args>(args)...} {}
+  constexpr concrete_method(Args &&...args) : m_object{fwd(args)...} {}
 };
 
 template <typename Base, typename Type, typename Method, typename R,
@@ -97,7 +103,7 @@ struct concrete_method<
   using concrete_method<Base, Type, Others...>::concrete_method;
   using concrete_method<Base, Type, Others...>::invoker;
   constexpr R invoker(Method, Args... args) const override {
-    return Method::invoker(this->m_object, static_cast<Args &&>(args)...);
+    return Method::invoker(this->m_object, fwd(args)...);
   }
 };
 
@@ -109,45 +115,41 @@ struct concrete_method<Base, Type,
   using concrete_method<Base, Type, Others...>::concrete_method;
   using concrete_method<Base, Type, Others...>::invoker;
   constexpr R invoker(Method, Args... args) override {
-    return Method::invoker(this->m_object, static_cast<Args &&>(args)...);
+    return Method::invoker(this->m_object, fwd(args)...);
   }
 };
 
-template <typename Base, typename Type, typename... Signatures>
+template <typename Base, typename Type, bool Movable, bool Copyable,
+          typename... Signatures>
 struct concrete : concrete_method<Base, Type, Signatures...> {
   using concrete_method<Base, Type, Signatures...>::concrete_method;
   using concrete_method<Base, Type, Signatures...>::invoker;
 
   constexpr virtual Base *clone(bool is_dynamic,
                                 std::byte *soo_buffer) const override {
-    if (is_dynamic)
-      return new concrete{this->m_object};
-    return new (soo_buffer) concrete{this->m_object};
+    if constexpr (Copyable) {
+      if (is_dynamic)
+        return new concrete{this->m_object};
+      return new (soo_buffer) concrete{this->m_object};
+    } else {
+      return nullptr;
+    }
   }
 
   constexpr virtual Base *move(bool is_dynamic,
                                std::byte *soo_buffer) override {
-    if (is_dynamic)
-      return new concrete{std::move(this->m_object)};
-    return new (soo_buffer) concrete{std::move(this->m_object)};
+    if constexpr (Movable) {
+      if (is_dynamic)
+        return new concrete{std::move(this->m_object)};
+      return new (soo_buffer) concrete{std::move(this->m_object)};
+    } else {
+      return nullptr;
+    }
   }
 };
 
 } // namespace details::concrete
 static_assert(sizeof(bool) == 1);
-
-template <int Size, typename BaseType> class soo {
-private:
-  template <typename T, typename... Args>
-  constexpr T *construct(Args &&...args) {
-    if constexpr (sizeof(T) <= Size) {
-      if (std::is_constant_evaluated())
-        return new T{std::forward<Args...>(args)...};
-    }
-  }
-
-private:
-};
 
 template <typename T, int N> constexpr bool is_dynamic() {
   if constexpr (sizeof(T) <= N)
@@ -160,55 +162,68 @@ template <typename T, std::size_t N, typename... Args>
 constexpr auto *construct(std::array<std::byte, N> &array, Args &&...args) {
   if constexpr (sizeof(T) <= N) {
     if (std::is_constant_evaluated())
-      return new T{static_cast<Args &&>(args)...};
-    return new (array.data()) T{static_cast<Args &&>(args)...};
+      return new T{fwd(args)...};
+    return new (array.data()) T{fwd(args)...};
   } else {
-    return new T{static_cast<Args &&>(args)...};
+    return new T{fwd(args)...};
   }
+}
+
+template <typename T, typename... List> constexpr bool contains() {
+  return (std::is_same_v<T, List> || ...);
 }
 
 template <int Size, typename... Methods>
 struct alignas(Size) basic_erased : public Methods... {
-  using Base = details::base::base<CreateSignature<Methods>...>;
+  using BaseMethods =
+      details::base::base_with_methods<CreateSignature<Methods>...>;
   static_assert(Size > sizeof(Base *));
+
+  static constexpr bool copyable = contains<Copy, Methods...>();
+  static constexpr bool movable = contains<Move, Methods...>();
 
   static constexpr auto buffer_size = Size - sizeof(bool) - sizeof(Base *);
 
   std::array<std::byte, buffer_size> m_array;
   bool m_dynamic = false;
-  B *m_ptr;
+  Base *m_ptr;
 
   template <typename T>
   constexpr basic_erased(T x)
       : m_dynamic{is_dynamic<
-            details::concrete::concrete<Base, T, CreateSignature<Methods>...>,
+            details::concrete::concrete<BaseMethods, T, movable, copyable,
+                                        CreateSignature<Methods>...>,
             buffer_size>()},
-        m_ptr{construct<
-            details::concrete::concrete<Base, T, CreateSignature<Methods>...>>(
+        m_ptr{construct<details::concrete::concrete<
+            BaseMethods, T, movable, copyable, CreateSignature<Methods>...>>(
             m_array, std::move(x))} {}
 
   template <typename T, typename... Args>
   constexpr basic_erased(std::in_place_type_t<T>, Args &&...args)
       : m_dynamic{is_dynamic<
-            details::concrete::concrete<Base, T, CreateSignature<Methods>...>,
+            details::concrete::concrete<BaseMethods, T, movable, copyable,
+                                        CreateSignature<Methods>...>,
             buffer_size>()},
-        m_ptr{construct<
-            details::concrete::concrete<Base, T, CreateSignature<Methods>...>>(
+        m_ptr{construct<details::concrete::concrete<
+            BaseMethods, T, movable, copyable, CreateSignature<Methods>...>>(
             m_array, static_cast<Args &&>(args)...)} {}
 
-  template <typename Method> constexpr decltype(auto) invoke(Method) const {
-    return static_cast<const Base *>(m_ptr)->invoker(Method{});
+  constexpr decltype(auto) invoke(auto method, auto &&...xs) const {
+    return static_cast<const BaseMethods *>(m_ptr)->invoker(method, fwd(xs)...);
   }
 
-  template <typename Method> constexpr decltype(auto) invoke(Method) {
-    return static_cast<Base *>(m_ptr)->invoker(Method{});
+  constexpr decltype(auto) invoke(auto method, auto &&...xs) {
+    return static_cast<BaseMethods *>(m_ptr)->invoker(method, fwd(xs)...);
   }
 
   constexpr basic_erased(basic_erased &&other) noexcept
+    requires movable
       : m_dynamic{other.m_dynamic},
         m_ptr{other.m_ptr->move(m_dynamic, m_array.data())} {}
 
-  constexpr basic_erased &operator=(basic_erased &&other) noexcept {
+  constexpr basic_erased &operator=(basic_erased &&other) noexcept
+    requires movable
+  {
     destroy();
     m_dynamic = other.m_dynamic;
     m_ptr = other.m_ptr->move(m_dynamic, m_array.data());
@@ -216,10 +231,13 @@ struct alignas(Size) basic_erased : public Methods... {
   }
 
   constexpr basic_erased(const basic_erased &other)
+    requires copyable
       : m_dynamic(other.m_dynamic),
         m_ptr(other.m_ptr->clone(m_dynamic, m_array.data())) {}
 
-  constexpr basic_erased &operator=(const basic_erased &other) {
+  constexpr basic_erased &operator=(const basic_erased &other)
+    requires copyable
+  {
     destroy();
     m_dynamic = other.m_dynamic;
     m_ptr = other.m_ptr->move(m_dynamic, m_array.data());
@@ -230,7 +248,7 @@ struct alignas(Size) basic_erased : public Methods... {
     if (m_dynamic)
       delete m_ptr;
     else
-      m_ptr->~B();
+      m_ptr->~Base();
   }
 
   constexpr ~basic_erased() { destroy(); }

@@ -28,7 +28,37 @@ struct Rectangle {
   constexpr double perimeter() const { return 4.0; }
 };
 
-using Surface = erased::erased<ComputeArea, Perimeter>;
+using Surface =
+    erased::erased<ComputeArea, Perimeter, erased::Copy, erased::Move>;
+
+using MoveOnlySurface = erased::erased<ComputeArea, Perimeter, erased::Move>;
+using CopyOnlySurface = erased::erased<ComputeArea, Perimeter, erased::Copy>;
+
+using OnlySurface = erased::erased<ComputeArea, Perimeter>;
+
+static_assert(std::is_nothrow_move_constructible_v<Surface>);
+static_assert(std::is_nothrow_move_assignable_v<Surface>);
+static_assert(std::is_copy_constructible_v<Surface>);
+static_assert(std::is_copy_assignable_v<Surface>);
+
+static_assert(std::is_nothrow_move_constructible_v<MoveOnlySurface>);
+static_assert(std::is_nothrow_move_assignable_v<MoveOnlySurface>);
+static_assert(!std::is_copy_constructible_v<MoveOnlySurface>);
+static_assert(!std::is_copy_assignable_v<MoveOnlySurface>);
+
+static_assert(!std::is_nothrow_move_constructible_v<CopyOnlySurface>);
+static_assert(!std::is_nothrow_move_assignable_v<CopyOnlySurface>);
+static_assert(std::is_move_constructible_v<CopyOnlySurface>);
+static_assert(std::is_move_assignable_v<CopyOnlySurface>);
+static_assert(std::is_copy_constructible_v<CopyOnlySurface>);
+static_assert(std::is_copy_assignable_v<CopyOnlySurface>);
+
+static_assert(!std::is_nothrow_move_constructible_v<OnlySurface>);
+static_assert(!std::is_nothrow_move_assignable_v<OnlySurface>);
+static_assert(!std::is_move_constructible_v<OnlySurface>);
+static_assert(!std::is_move_assignable_v<OnlySurface>);
+static_assert(!std::is_copy_constructible_v<OnlySurface>);
+static_assert(!std::is_copy_assignable_v<OnlySurface>);
 
 constexpr double simpleComputation(Surface x) {
   return x.perimeter() + x.computeArea();
