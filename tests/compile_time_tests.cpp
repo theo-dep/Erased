@@ -35,11 +35,20 @@ constexpr double simpleComputation(Surface x) {
   return x.perimeter() + x.computeArea();
 }
 
+constexpr double simpleMove() {
+  Surface x = Circle();
+  x = Rectangle();
+
+  return simpleComputation(std::move(x));
+}
+
 void simple_computation() {
   static_assert(simpleComputation(Circle()) == 6.28 + 3.14);
   static_assert(simpleComputation(Rectangle()) == 4.0 + 1.0);
 
   static_assert(sizeof(Surface) == 32);
 }
+
+void simple_move() { static_assert(simpleMove() == 1.0 + 4.0); }
 
 int main() {}
