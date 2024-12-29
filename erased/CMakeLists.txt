@@ -11,4 +11,19 @@ target_sources(erased
         FILES include/erased/erased.h
 )
 
+set(clang_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang>")
+set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
+
+add_library(erased_sanitizer INTERFACE)
+target_compile_options(erased_sanitizer INTERFACE
+    $<${clang_cxx}:-fsanitize=address;-fsanitize=undefined>
+    $<${msvc_cxx}:/fsanitize=address>
+)
+
+target_link_options(erased_sanitizer INTERFACE
+    $<${clang_cxx}:-fsanitize=address>
+)
+
 add_library(erased::erased ALIAS erased)
+add_library(erased::sanitizer ALIAS erased_sanitizer)
+

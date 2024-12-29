@@ -50,7 +50,8 @@ struct Base {
   constexpr virtual ~Base() = default;
   constexpr virtual Base *clone(bool is_dynamic,
                                 std::byte *soo_buffer) const = 0;
-  constexpr virtual Base *move(bool is_dynamic, std::byte *soo_buffer) = 0;
+  constexpr virtual Base *move(bool is_dynamic,
+                               std::byte *soo_buffer) noexcept = 0;
 };
 
 struct Copy {
@@ -136,7 +137,7 @@ struct concrete : concrete_method<Base, Type, Signatures...> {
   }
 
   constexpr virtual Base *move(bool is_dynamic,
-                               std::byte *soo_buffer) override {
+                               std::byte *soo_buffer) noexcept override {
     if constexpr (Movable) {
       if (is_dynamic)
         return new concrete{std::move(this->m_object)};
@@ -177,7 +178,7 @@ template <int Size> struct base_erased {
   static constexpr auto buffer_size = Size - sizeof(bool) - sizeof(Base *);
 
   std::array<std::byte, buffer_size> m_array;
-  bool m_dynamic = false;
+  bool m_dynamic;
   Base *m_ptr;
 
   template <typename T>

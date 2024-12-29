@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <erased/erased.h>
+#include <memory>
 
 namespace er {
 struct ComputeArea {
