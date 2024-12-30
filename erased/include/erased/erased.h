@@ -10,26 +10,22 @@ namespace erased {
 
 struct erased_type_t {};
 
-enum class constness { Const, Mutable };
+template <bool condition> struct fast_conditional {
+  template <typename T, typename F> using apply = T;
+};
+
+template <> struct fast_conditional<false> {
+  template <typename T, typename F> using apply = F;
+};
 
 template <typename Method, typename Signature> struct MethodTraitImpl;
 
 template <typename Method, typename ReturnType, typename ErasedType,
           typename... Args>
 struct MethodTraitImpl<Method, ReturnType (*)(ErasedType, Args...)> {
-  static constexpr bool is_const =
-      std::is_const_v<std::remove_reference_t<ErasedType>>;
-  static constexpr bool is_lvalue = std::is_lvalue_reference_v<ErasedType>;
-  static constexpr bool is_rvalue = std::is_rvalue_reference_v<ErasedType>;
-
-  static constexpr constness cv_ref_function() {
-    if (is_const)
-      return constness::Const;
-    return constness::Mutable;
-  }
-
-  static constexpr auto cv_ref = cv_ref_function();
-  using function_pointer = ReturnType (*)(Args...);
+  using function =
+      fast_conditional<std::is_const_v<ErasedType>>::template apply<
+          ReturnType(Args...) const, ReturnType(Args...)>;
 };
 
 template <typename Method>
@@ -38,13 +34,12 @@ using MethodTrait =
                     decltype(&Method::template invoker<erased::erased_type_t>)>;
 
 template <typename Method>
-using MethodPtr = typename MethodTrait<Method>::function_pointer;
+using MethodPtr = typename MethodTrait<Method>::function;
 
-template <typename Method, typename F, constness> struct Signature;
+template <typename Method, typename F> struct Signature;
 
 template <typename Method>
-using CreateSignature =
-    Signature<Method, MethodPtr<Method>, MethodTrait<Method>::cv_ref>;
+using CreateSignature = Signature<Method, MethodPtr<Method>>;
 
 struct Copy {
   static void invoker(const auto &) {}
@@ -62,15 +57,15 @@ template <> struct base_with_methods<> {
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base_with_methods<Signature<Method, R (*)(Args...), constness::Const>,
-                         Others...> : base_with_methods<Others...> {
+struct base_with_methods<Signature<Method, R(Args...) const>, Others...>
+    : base_with_methods<Others...> {
   using base_with_methods<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) const = 0;
 };
 
 template <typename Method, typename R, typename... Args, typename... Others>
-struct base_with_methods<Signature<Method, R (*)(Args...), constness::Mutable>,
-                         Others...> : base_with_methods<Others...> {
+struct base_with_methods<Signature<Method, R(Args...)>, Others...>
+    : base_with_methods<Others...> {
   using base_with_methods<Others...>::invoker;
   constexpr virtual R invoker(Method, Args...) = 0;
 };
@@ -89,7 +84,6 @@ template <typename Base, typename Type, typename... Ts> struct concrete_method;
 
 template <typename Base, typename Type>
 struct concrete_method<Base, Type> : Base {
-  using Base::invoker;
   Type m_object;
 
   constexpr concrete_method(auto &&...args) : m_object{fwd(args)...} {}
@@ -97,11 +91,9 @@ struct concrete_method<Base, Type> : Base {
 
 template <typename Base, typename Type, typename Method, typename R,
           typename... Args, typename... Others>
-struct concrete_method<
-    Base, Type, Signature<Method, R (*)(Args...), constness::Const>, Others...>
-    : concrete_method<Base, Type, Others...> {
+struct concrete_method<Base, Type, Signature<Method, R(Args...) const>,
+                       Others...> : concrete_method<Base, Type, Others...> {
   using concrete_method<Base, Type, Others...>::concrete_method;
-  using concrete_method<Base, Type, Others...>::invoker;
   constexpr R invoker(Method, Args... args) const override {
     return Method::invoker(this->m_object, fwd(args)...);
   }
@@ -109,11 +101,9 @@ struct concrete_method<
 
 template <typename Base, typename Type, typename Method, typename R,
           typename... Args, typename... Others>
-struct concrete_method<Base, Type,
-                       Signature<Method, R (*)(Args...), constness::Mutable>,
-                       Others...> : concrete_method<Base, Type, Others...> {
+struct concrete_method<Base, Type, Signature<Method, R(Args...)>, Others...>
+    : concrete_method<Base, Type, Others...> {
   using concrete_method<Base, Type, Others...>::concrete_method;
-  using concrete_method<Base, Type, Others...>::invoker;
   constexpr R invoker(Method, Args... args) override {
     return Method::invoker(this->m_object, fwd(args)...);
   }
@@ -123,7 +113,6 @@ template <typename Base, typename Type, bool Movable, bool Copyable,
           typename... Signatures>
 struct concrete : concrete_method<Base, Type, Signatures...> {
   using concrete_method<Base, Type, Signatures...>::concrete_method;
-  using concrete_method<Base, Type, Signatures...>::invoker;
 
   constexpr virtual Base *clone(bool is_dynamic,
                                 std::byte *soo_buffer) const override {
@@ -233,7 +222,7 @@ struct alignas(Size) basic_erased : public Methods... {
   {
     destroy();
     m_dynamic = other.m_dynamic;
-    m_ptr = other.m_ptr->move(m_dynamic, m_array.data());
+    m_ptr = other.m_ptr->clone(m_dynamic, m_array.data());
     return *this;
   }
   constexpr void destroy() {
