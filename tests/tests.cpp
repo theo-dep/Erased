@@ -127,3 +127,8 @@ TEST(Tests, tests) {
   ASSERT_EQ(in_place_construction(),
             (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
 }
+
+int main() {
+    testing::InitGoogleTest();
+    return RUN_ALL_TESTS();
+}

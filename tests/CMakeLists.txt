@@ -6,4 +6,4 @@ FetchContent_Declare(googletest
 FetchContent_MakeAvailable(googletest)
 
 add_executable(Tests tests.cpp)
-target_link_libraries(Tests PRIVATE erased::erased erased::sanitizer gtest gtest_main)
+target_link_libraries(Tests PRIVATE erased::erased erased::sanitizer gtest)

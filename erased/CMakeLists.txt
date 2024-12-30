@@ -24,6 +24,10 @@ target_link_options(erased_sanitizer INTERFACE
     $<${clang_cxx}:-fsanitize=address>
 )
 
+target_compile_options(erased_sanitizer INTERFACE
+    $<${msvc_cxx}:-D_DISABLE_VECTOR_ANNOTATION;-D_DISABLE_STRING_ANNOTATION>
+)
+
 add_library(erased::erased ALIAS erased)
 add_library(erased::sanitizer ALIAS erased_sanitizer)
 
