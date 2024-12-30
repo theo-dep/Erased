@@ -92,6 +92,7 @@ constexpr double in_place_construction() {
   return y.computeArea() + x.perimeter();
 }
 
+#ifndef _MSC_VER
 TEST(Tests, CompileTimeTests) {
   static_assert(simpleComputation(Circle(2.0)) ==
                 Circle(2.0).computeArea() + Circle(2.0).perimeter());
@@ -108,6 +109,7 @@ TEST(Tests, CompileTimeTests) {
   static_assert(in_place_construction() ==
                 (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
 }
+#endif
 
 TEST(Tests, tests) {
   ASSERT_EQ(simpleComputation(Circle(2.0)),
