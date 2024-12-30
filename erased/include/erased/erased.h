@@ -70,13 +70,6 @@ struct base_with_methods<Signature<Method, R(Args...)>, Others...>
   constexpr virtual R invoker(Method, Args...) = 0;
 };
 
-template <typename... Signatures>
-struct base : public base_with_methods<Signatures...> {
-  using base_with_methods<Signatures...>::invoker;
-  constexpr virtual base *clone(bool isDynamic, std::byte *buffer) const = 0;
-  constexpr virtual base *move(bool isDynamic, std::byte *buffer) noexcept = 0;
-};
-
 } // namespace details::base
 
 namespace details::concrete {
@@ -109,34 +102,6 @@ struct concrete_method<Base, Type, Signature<Method, R(Args...)>, Others...>
   }
 };
 
-template <typename Base, typename Type, bool Movable, bool Copyable,
-          typename... Signatures>
-struct concrete : concrete_method<Base, Type, Signatures...> {
-  using concrete_method<Base, Type, Signatures...>::concrete_method;
-
-  constexpr virtual Base *clone(bool is_dynamic,
-                                std::byte *soo_buffer) const override {
-    if constexpr (Copyable) {
-      if (is_dynamic)
-        return new concrete{this->m_object};
-      return new (soo_buffer) concrete{this->m_object};
-    } else {
-      return nullptr;
-    }
-  }
-
-  constexpr virtual Base *move(bool is_dynamic,
-                               std::byte *soo_buffer) noexcept override {
-    if constexpr (Movable) {
-      if (is_dynamic)
-        return new concrete{std::move(this->m_object)};
-      return new (soo_buffer) concrete{std::move(this->m_object)};
-    } else {
-      return nullptr;
-    }
-  }
-};
-
 } // namespace details::concrete
 static_assert(sizeof(bool) == 1);
 
@@ -164,12 +129,46 @@ template <typename T, typename... List> constexpr bool contains() {
 
 template <int Size, typename... Methods>
 struct alignas(Size) basic_erased : public Methods... {
-  using Base = details::base::base<CreateSignature<Methods>...>;
+  static constexpr bool copyable = contains<Copy, Methods...>();
+  static constexpr bool movable = contains<Move, Methods...>();
+
+  struct Base : details::base::base_with_methods<CreateSignature<Methods>...> {
+    constexpr virtual Base *clone(bool isDynamic, std::byte *buffer) const = 0;
+    constexpr virtual Base *move(bool isDynamic,
+                                 std::byte *buffer) noexcept = 0;
+  };
 
   static constexpr auto buffer_size = Size - sizeof(bool) - sizeof(Base *);
 
-  static constexpr bool copyable = contains<Copy, Methods...>();
-  static constexpr bool movable = contains<Move, Methods...>();
+  template <typename Type>
+  struct concrete
+      : details::concrete::concrete_method<Base, Type,
+                                           CreateSignature<Methods>...> {
+    using details::concrete::concrete_method<
+        Base, Type, CreateSignature<Methods>...>::concrete_method;
+
+    constexpr virtual Base *clone(bool is_dynamic,
+                                  std::byte *soo_buffer) const override {
+      if constexpr (copyable) {
+        if (is_dynamic)
+          return new concrete{this->m_object};
+        return new (soo_buffer) concrete{this->m_object};
+      } else {
+        return nullptr;
+      }
+    }
+
+    constexpr virtual Base *move(bool is_dynamic,
+                                 std::byte *soo_buffer) noexcept override {
+      if constexpr (movable) {
+        if (is_dynamic)
+          return new concrete{std::move(this->m_object)};
+        return new (soo_buffer) concrete{std::move(this->m_object)};
+      } else {
+        return nullptr;
+      }
+    }
+  };
 
   std::array<std::byte, buffer_size> m_array;
   bool m_dynamic;
@@ -177,14 +176,8 @@ struct alignas(Size) basic_erased : public Methods... {
 
   template <typename T>
   constexpr basic_erased(std::in_place_type_t<T>, auto &&...args) noexcept
-      : m_dynamic{is_dynamic<
-            details::concrete::concrete<Base, T, movable, copyable,
-                                        CreateSignature<Methods>...>,
-            buffer_size>()},
-        m_ptr{
-            construct<details::concrete::concrete<Base, T, movable, copyable,
-                                                  CreateSignature<Methods>...>>(
-                m_array, fwd(args)...)} {}
+      : m_dynamic{is_dynamic<concrete<T>, buffer_size>()},
+        m_ptr{construct<concrete<T>>(m_array, fwd(args)...)} {}
 
   template <typename T>
   constexpr basic_erased(T x) noexcept
