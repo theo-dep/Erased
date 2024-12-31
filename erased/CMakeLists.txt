@@ -18,7 +18,7 @@ set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 add_library(erased_sanitizer INTERFACE)
 target_compile_options(erased_sanitizer INTERFACE
     $<${clang_cxx}:-fsanitize=address;-fsanitize=undefined>
-    $<${msvc_cxx}:/fsanitize=address>
+    $<${msvc_cxx}:/fsanitize=address;/Zc:preprocessor>
 )
 
 target_link_options(erased_sanitizer INTERFACE
