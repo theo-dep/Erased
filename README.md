@@ -4,14 +4,14 @@ It is meant to be a fast and easy-to-use C++ type-erasure implementation.
 
 It is heavily inspired by [AnyAny](https://github.com/kelbon/AnyAny).
 
-The tested compilers are:
-1. MSVC (19.32 and above)
+The [tested compilers](https://godbolt.org/z/ss8PE6zc3) are:
+1. MSVC (19.32 and above): `constexpr` does not work since MSVC does not handle `virtual` function in a constexpr context yet.
 2. Clang (19.1 and above)
 3. GCC (14.1 and above)
 
 ## Basics
 Here are the currently supported features
-1. `constexpr` friendly (in Clang and GCC, since MSVC does not support properly `virtual` function in a constexpr context)
+1. `constexpr` friendly
 2. Small Object Optimization
 3. Copy and `noexcept` move operations
 4. Extendible with multiple behaviors
