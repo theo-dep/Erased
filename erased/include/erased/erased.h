@@ -270,7 +270,7 @@ template <typename... Methods> using erased = basic_erased<32, Methods...>;
     }                                                                          \
                                                                                \
     constexpr decltype(auto) name(this auto &&self, auto &&...args) {          \
-      return self.invoke(Name{}, fwd(args)...);                                \
+      return self.invoke(Name{}, static_cast<decltype(args) &&>(args)...);     \
     }                                                                          \
   }
 

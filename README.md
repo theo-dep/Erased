@@ -1,8 +1,13 @@
 # Erased
 Erased is your constexpr friendly type erasure wrapper type.
-It is meant to be a fast and easy to use C++ type-erasure implementation.
+It is meant to be a fast and easy-to-use C++ type-erasure implementation.
 
-It is heavily inspired from [AnyAny](https://github.com/kelbon/AnyAny).
+It is heavily inspired by [AnyAny](https://github.com/kelbon/AnyAny).
+
+The tested compilers are:
+1. MSVC (19.32 and above)
+2. Clang (19.1 and above)
+3. GCC (14.1 and above)
 
 ## Basics
 Here are the currently supported features
@@ -42,7 +47,7 @@ void f(const Surface &x) {
 }
 ```
 
-<details open>
+<details close>
 <summary>Here is the same with macros</summary>
 
 ```cpp
@@ -52,7 +57,11 @@ ERASED_MAKE_BEHAVIOR(Perimeter, perimeter,
                      (const &self) requires(self.perimeter())->double);
 
 using Surface =
-    erased::erased<ComputeArea, Perimeter, erased::Copy, erased::Move>;
+    erased::erased<ComputeArea, Perimeter>;
 ```
 </details>
 
+## Erased provided behaviors
+The `erased::erased` type has only a constructor and destructor by default. We provide these behaviors to extend easily the given type:
+1. Copy: Add copy constructor and copy assignment operator
+2. Move: Add noexcept move constructor and noexcept move assignment operator

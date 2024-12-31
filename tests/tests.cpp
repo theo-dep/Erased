@@ -79,6 +79,22 @@ constexpr double in_place_construction() {
   return y.computeArea() + x.perimeter();
 }
 
+ERASED_MAKE_BEHAVIOR(
+    Computer, compute,
+    (const &self, int value) requires(self.compute(value))->int);
+
+using Computable = erased::erased<Computer>;
+
+constexpr int compute(Computable x, int value) { return x.compute(value); }
+
+struct Double {
+  constexpr int compute(int value) const { return value + value; }
+};
+
+struct Square {
+  constexpr int compute(int value) const { return value * value; }
+};
+
 #ifndef _MSC_VER
 TEST(Tests, CompileTimeTests) {
   static_assert(simpleComputation(Circle(2.0)) ==
@@ -95,6 +111,9 @@ TEST(Tests, CompileTimeTests) {
 
   static_assert(in_place_construction() ==
                 (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
+
+  static_assert(compute(Double{}, 10) == 20);
+  static_assert(compute(Square{}, 10) == 100);
 }
 #endif
 
@@ -113,4 +132,7 @@ TEST(Tests, tests) {
 
   ASSERT_EQ(in_place_construction(),
             (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
+
+  ASSERT_EQ(compute(Double{}, 10), 20);
+  ASSERT_EQ(compute(Square{}, 10), 100);
 }
