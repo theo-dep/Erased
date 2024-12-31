@@ -12,6 +12,7 @@ target_sources(erased
 )
 
 set(clang_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang>")
+set(gcc_cxx "$<COMPILE_LANG_AND_ID:CXX,GNU>")
 set(msvc_cxx "$<COMPILE_LANG_AND_ID:CXX,MSVC>")
 
 add_library(erased_sanitizer INTERFACE)

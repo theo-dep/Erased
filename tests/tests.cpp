@@ -1,23 +1,13 @@
 #include <erased/erased.h>
 #include <gtest/gtest.h>
 
-struct ComputeArea {
-  constexpr static double invoker(auto &self) { return self.computeArea(); }
+ERASED_MAKE_BEHAVIOR(ComputeArea, computeArea,
+                     (&self) requires(self.computeArea())->double);
+ERASED_MAKE_BEHAVIOR(Perimeter, perimeter,
+                     (const &self) requires(self.perimeter())->double);
 
-  // not necessary, but makes the client code easier to write
-  constexpr double computeArea(this auto &erased) {
-    return erased.invoke(ComputeArea{});
-  }
-};
-
-struct Perimeter {
-  constexpr static double invoker(const auto &self) { return self.perimeter(); }
-
-  // not necessary, but makes the client code easier to write
-  constexpr double perimeter(this const auto &erased) {
-    return erased.invoke(Perimeter{});
-  }
-};
+using Surface =
+    erased::erased<ComputeArea, Perimeter, erased::Copy, erased::Move>;
 
 struct Circle {
   constexpr double computeArea() { return radius * radius * 3.14; }
@@ -33,9 +23,6 @@ struct Rectangle {
   double a = 1.0;
   double b = 1.0;
 };
-
-using Surface =
-    erased::erased<ComputeArea, Perimeter, erased::Copy, erased::Move>;
 
 using MoveOnlySurface = erased::erased<ComputeArea, Perimeter, erased::Move>;
 using CopyOnlySurface = erased::erased<ComputeArea, Perimeter, erased::Copy>;
@@ -126,9 +113,4 @@ TEST(Tests, tests) {
 
   ASSERT_EQ(in_place_construction(),
             (Rectangle(10, 5).computeArea() + Circle(10.0).perimeter()));
-}
-
-int main() {
-    testing::InitGoogleTest();
-    return RUN_ALL_TESTS();
 }

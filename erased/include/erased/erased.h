@@ -232,3 +232,46 @@ template <typename... Methods> using erased = basic_erased<32, Methods...>;
 } // namespace erased
 
 #undef fwd
+
+#define ERASED_HEAD(a, ...) a
+#define ERASED_TAIL(a, ...) __VA_ARGS__
+#define ERASED_EAT(...)
+#define ERASED_EXPAND(...) __VA_ARGS__
+
+#define ERASED_REMOVE_PARENTHESIS_IMPL(...) __VA_ARGS__
+#define ERASED_REMOVE_PARENTHESIS(...)                                         \
+  ERASED_EXPAND(ERASED_REMOVE_PARENTHESIS_IMPL __VA_ARGS__)
+
+#define ERASED_ADD_COMA_AFTER_PARENTHESIS_IMPL(...) (__VA_ARGS__),
+#define ERASED_ADD_COMA_AFTER_PARENTHESIS(...)                                 \
+  (ERASED_EXPAND(ERASED_ADD_COMA_AFTER_PARENTHESIS_IMPL __VA_ARGS__))
+
+#define ERASED_REMOVE_AFTER_PARENTHESIS(...)                                   \
+  ERASED_REMOVE_PARENTHESIS(                                                   \
+      ERASED_HEAD ERASED_ADD_COMA_AFTER_PARENTHESIS(__VA_ARGS__))
+
+#define ERASED_CAT_IMPL(a, b) a##b
+#define ERASED_CAT(...) ERASED_CAT_IMPL(__VA_ARGS__)
+#define ERASED_GET_AFTER_requires(...) (__VA_ARGS__)
+#define ERASED_GET_INSIDE_REQUIRES(...)                                        \
+  ERASED_REMOVE_AFTER_PARENTHESIS(                                             \
+      ERASED_CAT(ERASED_GET_AFTER_, ERASED_EAT __VA_ARGS__))
+
+#define ERASED_GET_TRAILING_RETURN(...)                                        \
+  ERASED_EXPAND(ERASED_TAIL ERASED_ADD_COMA_AFTER_PARENTHESIS(                 \
+      ERASED_CAT(ERASED_GET_AFTER_, ERASED_EAT __VA_ARGS__)))
+
+#define ERASED_MAKE_BEHAVIOR(Name, name, signature)                            \
+  struct Name {                                                                \
+    static constexpr auto                                                      \
+    invoker(auto ERASED_REMOVE_AFTER_PARENTHESIS(signature))                   \
+        ERASED_GET_TRAILING_RETURN(signature) {                                \
+      return ERASED_GET_INSIDE_REQUIRES(signature);                            \
+    }                                                                          \
+                                                                               \
+    constexpr decltype(auto) name(this auto &&self, auto &&...args) {          \
+      return self.invoke(Name{}, fwd(args)...);                                \
+    }                                                                          \
+  }
+
+#undef fwd
