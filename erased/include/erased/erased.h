@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <type_traits>
 #include <utility>
 
@@ -19,6 +18,14 @@ template <> struct fast_conditional<false> {
 };
 
 template <typename Method, typename Signature> struct MethodTraitImpl;
+
+template <typename Method, typename ReturnType, typename ErasedType,
+          typename... Args>
+struct MethodTraitImpl<Method, ReturnType (*)(ErasedType &, Args...)> {
+  using function =
+      fast_conditional<std::is_const_v<std::remove_reference_t<ErasedType>>>::
+          template apply<ReturnType(Args...) const, ReturnType(Args...)>;
+};
 
 template <typename Method, typename ReturnType, typename ErasedType,
           typename... Args>
@@ -113,11 +120,11 @@ template <typename T, int N> constexpr bool is_dynamic() {
 }
 
 template <typename T, std::size_t N>
-constexpr auto *construct(std::array<std::byte, N> &array, auto &&...args) {
+constexpr auto *construct(char (&array)[N], auto &&...args) {
   if constexpr (sizeof(T) <= N) {
     if (std::is_constant_evaluated())
       return new T{fwd(args)...};
-    return new (array.data()) T{fwd(args)...};
+    return new (array) T{fwd(args)...};
   } else {
     return new T{fwd(args)...};
   }
@@ -133,9 +140,8 @@ struct alignas(Size) basic_erased : public Methods... {
   static constexpr bool movable = contains<Move, Methods...>();
 
   struct Base : details::base::base_with_methods<CreateSignature<Methods>...> {
-    constexpr virtual Base *clone(bool isDynamic, std::byte *buffer) const = 0;
-    constexpr virtual Base *move(bool isDynamic,
-                                 std::byte *buffer) noexcept = 0;
+    constexpr virtual Base *clone(bool isDynamic, char *buffer) const = 0;
+    constexpr virtual Base *move(bool isDynamic, char *buffer) noexcept = 0;
   };
 
   static constexpr auto buffer_size = Size - sizeof(bool) - sizeof(Base *);
@@ -148,7 +154,7 @@ struct alignas(Size) basic_erased : public Methods... {
         Base, Type, CreateSignature<Methods>...>::concrete_method;
 
     constexpr virtual Base *clone(bool is_dynamic,
-                                  std::byte *soo_buffer) const override {
+                                  char *soo_buffer) const override {
       if constexpr (copyable) {
         if (is_dynamic)
           return new concrete{this->m_object};
@@ -159,18 +165,18 @@ struct alignas(Size) basic_erased : public Methods... {
     }
 
     constexpr virtual Base *move(bool is_dynamic,
-                                 std::byte *soo_buffer) noexcept override {
+                                 char *soo_buffer) noexcept override {
       if constexpr (movable) {
         if (is_dynamic)
-          return new concrete{std::move(this->m_object)};
-        return new (soo_buffer) concrete{std::move(this->m_object)};
+          return new concrete{static_cast<Type &&>(this->m_object)};
+        return new (soo_buffer) concrete{static_cast<Type &&>(this->m_object)};
       } else {
         return nullptr;
       }
     }
   };
 
-  std::array<std::byte, buffer_size> m_array;
+  char m_array[buffer_size];
   bool m_dynamic;
   Base *m_ptr;
 
@@ -181,7 +187,7 @@ struct alignas(Size) basic_erased : public Methods... {
 
   template <typename T>
   constexpr basic_erased(T x) noexcept
-      : basic_erased{std::in_place_type<T>, std::move(x)} {}
+      : basic_erased{std::in_place_type<T>, static_cast<T &&>(x)} {}
 
   constexpr decltype(auto) invoke(auto method, auto &&...xs) const {
     return m_ptr->invoker(method, fwd(xs)...);
@@ -194,19 +200,19 @@ struct alignas(Size) basic_erased : public Methods... {
   constexpr basic_erased(basic_erased &&other) noexcept
     requires movable
       : m_dynamic(other.m_dynamic),
-        m_ptr{other.m_ptr->move(m_dynamic, m_array.data())} {}
+        m_ptr{other.m_ptr->move(m_dynamic, m_array)} {}
 
   constexpr basic_erased(const basic_erased &other)
     requires copyable
       : m_dynamic(other.m_dynamic),
-        m_ptr{other.m_ptr->clone(m_dynamic, m_array.data())} {}
+        m_ptr{other.m_ptr->clone(m_dynamic, m_array)} {}
 
   constexpr basic_erased &operator=(basic_erased &&other) noexcept
     requires movable
   {
     destroy();
     m_dynamic = other.m_dynamic;
-    m_ptr = other.m_ptr->move(m_dynamic, m_array.data());
+    m_ptr = other.m_ptr->move(m_dynamic, m_array);
     return *this;
   }
 
@@ -215,7 +221,7 @@ struct alignas(Size) basic_erased : public Methods... {
   {
     destroy();
     m_dynamic = other.m_dynamic;
-    m_ptr = other.m_ptr->clone(m_dynamic, m_array.data());
+    m_ptr = other.m_ptr->clone(m_dynamic, m_array);
     return *this;
   }
   constexpr void destroy() {
