@@ -1,8 +1,10 @@
 #pragma once
 
 #include <new>
+#include <typeinfo>
 #include <type_traits>
 #include <utility>
+#include <memory>
 
 #define fwd(x) static_cast<decltype(x) &&>(x)
 
@@ -42,31 +44,30 @@ template <typename Method>
 using CreateSignature = Signature<Method, MethodPtr<Method>>;
 
 struct Copy {
-  static void invoker(const auto &) {}
+  constexpr static void invoker(const auto &) {}
 };
 struct Move {
-  static void invoker(const auto &) {}
+  constexpr static void invoker(const auto &) {}
 };
 
 namespace details::base {
 template <typename...> struct base_with_methods;
 
 template <> struct base_with_methods<> {
+  using type = void;
   constexpr void invoker() {}
   constexpr virtual ~base_with_methods() = default;
 };
 
-template <typename Method, typename R, typename... Args, typename... Others>
-struct base_with_methods<Signature<Method, R(Args...) const>, Others...>
-    : base_with_methods<Others...> {
-  using base_with_methods<Others...>::invoker;
+template <typename Method, typename R, typename... Args>
+struct base_with_methods<Signature<Method, R(Args...) const>> {
+  using type = Method;
   constexpr virtual R invoker(Method, Args...) const = 0;
 };
 
-template <typename Method, typename R, typename... Args, typename... Others>
-struct base_with_methods<Signature<Method, R(Args...)>, Others...>
-    : base_with_methods<Others...> {
-  using base_with_methods<Others...>::invoker;
+template <typename Method, typename R, typename... Args>
+struct base_with_methods<Signature<Method, R(Args...)>> {
+  using type = Method;
   constexpr virtual R invoker(Method, Args...) = 0;
 };
 
@@ -77,26 +78,26 @@ template <typename Base, typename Type, typename... Ts> struct concrete_method;
 
 template <typename Base, typename Type>
 struct concrete_method<Base, Type> : Base {
-  Type m_object;
+  Type& m_object;
 
-  constexpr concrete_method(auto &&...args) : m_object{fwd(args)...} {}
+  constexpr concrete_method(Type& object) : m_object{object} {}
 };
 
 template <typename Base, typename Type, typename Method, typename R,
-          typename... Args, typename... Others>
-struct concrete_method<Base, Type, Signature<Method, R(Args...) const>,
-                       Others...> : concrete_method<Base, Type, Others...> {
-  using concrete_method<Base, Type, Others...>::concrete_method;
+          typename... Args>
+struct concrete_method<Base, Type, Signature<Method, R(Args...) const>>
+    : concrete_method<Base, Type> {
+  using concrete_method<Base, Type>::concrete_method;
   constexpr R invoker(Method, Args... args) const override {
     return Method::invoker(this->m_object, fwd(args)...);
   }
 };
 
 template <typename Base, typename Type, typename Method, typename R,
-          typename... Args, typename... Others>
-struct concrete_method<Base, Type, Signature<Method, R(Args...)>, Others...>
-    : concrete_method<Base, Type, Others...> {
-  using concrete_method<Base, Type, Others...>::concrete_method;
+          typename... Args>
+struct concrete_method<Base, Type, Signature<Method, R(Args...)>>
+    : concrete_method<Base, Type> {
+  using concrete_method<Base, Type>::concrete_method;
   constexpr R invoker(Method, Args... args) override {
     return Method::invoker(this->m_object, fwd(args)...);
   }
@@ -132,37 +133,63 @@ struct alignas(Size) basic_erased : public Methods... {
   static constexpr bool copyable = contains<Copy, Methods...>();
   static constexpr bool movable = contains<Move, Methods...>();
 
-  struct Base : details::base::base_with_methods<CreateSignature<Methods>...> {
-    constexpr virtual Base *clone(bool isDynamic, char *buffer) const = 0;
-    constexpr virtual Base *move(bool isDynamic, char *buffer) noexcept = 0;
+  struct Base {
+    using MethodStorage = std::tuple<std::unique_ptr<details::base::base_with_methods<CreateSignature<Methods>>>...>;
+    MethodStorage m_methods;
+
+    constexpr virtual ~Base() = default;
+
+    constexpr virtual Base *clone(bool is_dynamic, char *buffer) const = 0;
+    constexpr virtual Base *move(bool is_dynamic, char *buffer) noexcept = 0;
+
+    template <typename Method>
+    constexpr decltype(auto) invoker(Method method, auto &&...xs) const {
+      return invoke_helper(method, fwd(xs)...);
+    }
+
+  private:
+    template <typename Method, std::size_t I = 0>
+    constexpr decltype(auto) invoke_helper(Method method, auto &&...xs) const {
+      if constexpr (I < sizeof...(Methods)) {
+        const auto& storage_method = std::get<I>(m_methods);
+        if constexpr (typeid(typename std::remove_cvref_t<decltype(*storage_method)>::type) == typeid(Method)) {
+          return storage_method->invoker(method, fwd(xs)...);
+        } else {
+          return invoke_helper<Method, I + 1>(method, fwd(xs)...);
+        }
+      } else {
+        static_assert(false);
+      }
+    }
   };
 
   static constexpr auto buffer_size = Size - sizeof(bool) - sizeof(Base *);
 
   template <typename Type>
-  struct concrete
-      : details::concrete::concrete_method<Base, Type,
-                                           CreateSignature<Methods>...> {
-    using details::concrete::concrete_method<
-        Base, Type, CreateSignature<Methods>...>::concrete_method;
+  struct Concrete : Base {
+    Type m_object;
 
-    constexpr virtual Base *clone(bool is_dynamic,
-                                  char *soo_buffer) const override {
+    constexpr Concrete(auto &&...args) : m_object{fwd(args)...} {
+      this->m_methods = std::make_tuple(std::make_unique<details::concrete::concrete_method<
+            details::base::base_with_methods<CreateSignature<Methods>>, Type, CreateSignature<Methods>
+          >>(this->m_object)...);
+    }
+
+    constexpr Base *clone(bool is_dynamic, char *soo_buffer) const override {
       if constexpr (copyable) {
         if (is_dynamic)
-          return new concrete{this->m_object};
-        return new (soo_buffer) concrete{this->m_object};
+          return new Concrete{this->m_object};
+        return new (soo_buffer) Concrete{this->m_object};
       } else {
         return nullptr;
       }
     }
 
-    constexpr virtual Base *move(bool is_dynamic,
-                                 char *soo_buffer) noexcept override {
+    constexpr Base *move(bool is_dynamic, char *soo_buffer) noexcept override {
       if constexpr (movable) {
         if (is_dynamic)
-          return new concrete{static_cast<Type &&>(this->m_object)};
-        return new (soo_buffer) concrete{static_cast<Type &&>(this->m_object)};
+          return new Concrete{static_cast<Type &&>(this->m_object)};
+        return new (soo_buffer) Concrete{static_cast<Type &&>(this->m_object)};
       } else {
         return nullptr;
       }
@@ -175,8 +202,8 @@ struct alignas(Size) basic_erased : public Methods... {
 
   template <typename T>
   constexpr basic_erased(std::in_place_type_t<T>, auto &&...args) noexcept
-      : m_dynamic{is_dynamic<concrete<T>, buffer_size>()},
-        m_ptr{construct<concrete<T>>(m_array, fwd(args)...)} {}
+      : m_dynamic{is_dynamic<Concrete<T>, buffer_size>()},
+        m_ptr{construct<Concrete<T>>(m_array, fwd(args)...)} {}
 
   template <typename T>
   constexpr basic_erased(T x) noexcept
