@@ -23,16 +23,8 @@ template <typename Method, typename ReturnType, typename ErasedType,
           typename... Args>
 struct MethodTraitImpl<Method, ReturnType (*)(ErasedType &, Args...)> {
   using function =
-      fast_conditional<std::is_const_v<std::remove_reference_t<ErasedType>>>::
-          template apply<ReturnType(Args...) const, ReturnType(Args...)>;
-};
-
-template <typename Method, typename ReturnType, typename ErasedType,
-          typename... Args>
-struct MethodTraitImpl<Method, ReturnType (*)(ErasedType, Args...)> {
-  using function =
-      fast_conditional<std::is_const_v<std::remove_reference_t<ErasedType>>>::
-          template apply<ReturnType(Args...) const, ReturnType(Args...)>;
+      fast_conditional<std::is_const_v<ErasedType>>::template apply<
+          ReturnType(Args...) const, ReturnType(Args...)>;
 };
 
 template <typename Method>

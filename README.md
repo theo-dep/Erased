@@ -1,11 +1,11 @@
 # Erased
 Erased is your constexpr friendly type erasure wrapper type.
-It is meant to be a fast and easy-to-use C++ type-erasure implementation.
+It is a C++ type-erasure implementation developed with performance and ease of use in mind.
 
 It is heavily inspired by [AnyAny](https://github.com/kelbon/AnyAny).
 
 The [tested compilers](https://godbolt.org/z/ss8PE6zc3) are:
-1. MSVC (19.32 and above): `constexpr` does not work since MSVC does not handle `virtual` function in a constexpr context yet.
+1. MSVC (19.32 and above): `constexpr` does not work since MSVC does not yet handle `virtual` functions in a constexpr context.
 2. Clang (19.1 and above)
 3. GCC (14.1 and above)
 
@@ -18,32 +18,43 @@ Here are the currently supported features
 5. Macros helper to remove more and more boilerplate.
 6. Natural syntax at call site.
 
-Here is an exemple of use:
+Here is an example of use:
 
 ```cpp
-struct ComputeArea {
-  constexpr static double invoker(auto &self) { return self.computeArea(); }
+struct Draw {
+  constexpr static void invoker(const auto &self, std::ostream &stream) { 
+    return self.draw(stream); 
+ }
 
-  // not necessary, but makes the client code easier to write
-  constexpr double computeArea(this auto &erased) {
-    return erased.invoke(ComputeArea{});
-  }
+ // not necessary, but makes the client code easier to write
+  constexpr void draw(this const auto &erased, std::ostream &stream) {
+    return erased.invoke(Draw{}, stream);
+ }
 };
 
-struct Perimeter {
-  constexpr static double invoker(const auto &self) { return self.perimeter(); }
+using Drawable = erased::erased<Draw>;
 
-  // not necessary, but makes the client code easier to write
-  constexpr double perimeter(this const auto &erased) {
-    return erased.invoke(Perimeter{});
-  }
+void render(const Drawable &x) {
+    x.draw(std::cout);
+}
+
+struct Circle {
+  void draw(std::ostream &stream) const {
+    stream << "Circle\n";
+ }
 };
 
-using Surface = erased::erased<ComputeArea, Perimeter>;
+struct Rectangle {
+  void draw(std::ostream &stream) const {
+    stream << "Rectangle\n";
+ }
+};
 
-void f(const Surface &x) {
-    double area = x.computeArea();
-    double perimeter = x.perimeter();
+int main() {
+ Circle c;
+ Rectangle r;
+  render(c);
+  render(r);
 }
 ```
 
@@ -51,13 +62,10 @@ void f(const Surface &x) {
 <summary>Here is the same with macros</summary>
 
 ```cpp
-ERASED_MAKE_BEHAVIOR(ComputeArea, computeArea,
-                     (&self) requires(self.computeArea())->double);
-ERASED_MAKE_BEHAVIOR(Perimeter, perimeter,
-                     (const &self) requires(self.perimeter())->double);
+ERASED_MAKE_BEHAVIOR(Draw, draw,
+ (const &self, std::ostream &stream) requires(self.draw(), stream)->void);
 
-using Surface =
-    erased::erased<ComputeArea, Perimeter>;
+using Drawable = erased::erased<Draw>;
 ```
 </details>
 
@@ -65,3 +73,10 @@ using Surface =
 The `erased::erased` type has only a constructor and destructor by default. We provide these behaviors to extend easily the given type:
 1. Copy: Add copy constructor and copy assignment operator
 2. Move: Add noexcept move constructor and noexcept move assignment operator
+
+For example, if you want to have a copyable and movable Drawable, you can do
+
+```cpp
+// Draw behavior
+using Drawable = erased::erased<Draw, erased::Move, erased::Copy>;
+```
