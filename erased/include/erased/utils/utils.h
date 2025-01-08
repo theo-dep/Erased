@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <tuple>
 #include <type_traits>
 
 namespace erased::details {
@@ -22,7 +23,7 @@ struct method_to_trait<Method, ReturnType (*)(ErasedType &, Args...)> {
   static constexpr bool is_const = std::is_const_v<ErasedType>;
 
   using first_argument =
-      fast_conditional<is_const>::template apply<const void *, void *>;
+      typename fast_conditional<is_const>::template apply<const void *, void *>;
 
   using type = ReturnType (*)(first_argument, Args...);
 
