@@ -1,6 +1,6 @@
 add_library(erased INTERFACE)
 
-target_compile_features(erased INTERFACE cxx_std_23)
+target_compile_features(erased INTERFACE cxx_std_26)
 target_include_directories(erased INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_sources(erased
@@ -8,7 +8,10 @@ target_sources(erased
         FILE_SET erased_headers
         TYPE HEADERS
         BASE_DIRS ./include/
-        FILES include/erased/erased.h
+        FILES
+            include/erased/erased.h
+            include/erased/ref.h
+            include/erased/utils/utils.h
 )
 
 set(clang_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang>")

@@ -1,4 +1,5 @@
 #include <erased/erased.h>
+#include <erased/ref.h>
 #include <gtest/gtest.h>
 
 ERASED_MAKE_BEHAVIOR(ComputeArea, computeArea,
@@ -8,6 +9,8 @@ ERASED_MAKE_BEHAVIOR(Perimeter, perimeter,
 
 using Surface =
     erased::erased<ComputeArea, Perimeter, erased::Copy, erased::Move>;
+
+using SurfaceRef = erased::ref<ComputeArea, Perimeter>;
 
 struct Circle {
   constexpr double computeArea() { return radius * radius * 3.14; }
@@ -79,6 +82,10 @@ constexpr double in_place_construction() {
   return y.computeArea() + x.perimeter();
 }
 
+constexpr double simpleComputationRef(SurfaceRef ref) {
+  return ref.perimeter() + ref.computeArea();
+}
+
 ERASED_MAKE_BEHAVIOR(
     Computer, compute,
     (const &self, int value) requires(self.compute(value))->int);
@@ -96,7 +103,7 @@ struct Square {
 };
 
 #ifndef _MSC_VER
-TEST(Tests, CompileTimeTests) {
+TEST(Tests, CompileTimeTestsErased) {
   static_assert(simpleComputation(Circle(2.0)) ==
                 Circle(2.0).computeArea() + Circle(2.0).perimeter());
   static_assert(simpleComputation(Rectangle(3.0)) ==
@@ -114,6 +121,24 @@ TEST(Tests, CompileTimeTests) {
 
   static_assert(compute(Double{}, 10) == 20);
   static_assert(compute(Square{}, 10) == 100);
+}
+
+constexpr auto simpleComputationRefCircle() {
+  Circle circle{1.0};
+  return simpleComputationRef(circle);
+}
+
+constexpr auto simpleComputationRefRectangle() {
+  Rectangle rectangle{10.0, 5.0};
+  return simpleComputationRef(rectangle);
+}
+
+TEST(Tests, CompileTimeTestsRef) {
+  static_assert(simpleComputationRefCircle() ==
+                Circle{1.0}.perimeter() + Circle{1.0}.computeArea());
+  static_assert(simpleComputationRefRectangle() ==
+                Rectangle{10.0, 5.0}.perimeter() +
+                    Rectangle{10.0, 5.0}.computeArea());
 }
 #endif
 
