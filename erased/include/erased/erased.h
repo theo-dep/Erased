@@ -78,7 +78,7 @@ template <int Size, typename... Methods> struct soo {
       if (std::is_constant_evaluated()) {
         delete ptr;
       } else {
-        ptr->~T();
+        std::destroy_at(ptr);
       }
     } else {
       delete ptr;

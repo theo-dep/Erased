@@ -60,7 +60,7 @@ constexpr bool is(const ref<Methods...> &object) {
 
 template <typename T, ref_concept Erased>
 constexpr auto *any_cast(Erased *object) {
-  if constexpr (std::is_same_v<const void *, decltype(object->m_ptr)> ||
+  if constexpr (std::decay_t<Erased>::all_const ||
                 std::is_const_v<std::remove_reference_t<Erased>>) {
     if (is<T>(*object)) {
       return static_cast<const T *>(object->m_ptr);
@@ -75,7 +75,7 @@ constexpr auto *any_cast(Erased *object) {
 
 template <typename T, ref_concept Erased>
 constexpr auto &any_cast(Erased &&object) {
-  if constexpr (std::is_same_v<const void *, decltype(object.m_ptr)> ||
+  if constexpr (std::decay_t<Erased>::all_const ||
                 std::is_const_v<std::remove_reference_t<Erased>>) {
     if (is<T>(object))
       return *static_cast<const T *>(object.m_ptr);
